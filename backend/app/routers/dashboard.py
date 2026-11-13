@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
 from app.services.dashboard import DashboardService
+from app.services.storage_trial import trial_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["采集看板"])
 
@@ -14,6 +15,17 @@ service = DashboardService()
 
 LIST_FIELDS = ["指标编号", "指标名称", "统计维度", "计算公式", "刷新频率", "展示类型", "数据源", "是否展示"]
 STATUSES = ["草稿", "待校验", "已启用", "已停用"]
+
+
+@router.get("/cleanup-board", response_model=dict)
+def cleanup_board(
+    status: str | None = Query(default=None, description="待清理、待确认、观察中、已清理、已撤销"),
+) -> dict[str, Any]:
+    """存储清理工作台：试算结果同步到采集看板，待清理条目在此集中呈现。"""
+    return {
+        "summary": trial_service.board_summary(),
+        "items": trial_service.cleanup_board(status),
+    }
 
 
 @router.get("", response_model=PageResult[dict])

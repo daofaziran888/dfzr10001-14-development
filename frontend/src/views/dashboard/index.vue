@@ -59,6 +59,39 @@
       <span>共 {{ total }} 条采集看板记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <h3 class="section-title">存储清理同步（来自保留期与分区试算）</h3>
+    <p class="section-desc">试算结果实时同步到采集看板：超出保留天数的分区先进入待清理，临近到期进入待确认。</p>
+    <div class="board-grid">
+      <div v-for="(value, label) in boardSummary" :key="label" class="board-card">
+        <span class="stat-label">{{ label }}</span>
+        <strong>{{ value }}</strong>
+      </div>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>同步编号</th><th>存储编号</th><th>分区编号</th><th>采集时间</th>
+          <th>清理日期</th><th>待清理条数</th><th>状态</th><th>来源试算</th><th>更新时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="item in boardItems" :key="String(item.id)">
+          <td>{{ item['同步编号'] }}</td>
+          <td>{{ item['存储编号'] }}</td>
+          <td>{{ item['分区编号'] }}</td>
+          <td>{{ item['采集时间'] }}</td>
+          <td>{{ item['清理日期'] }}</td>
+          <td>{{ item['待清理条数'] ?? 0 }}</td>
+          <td><span :class="badgeClass(item['状态'])">{{ item['状态'] }}</span></td>
+          <td>{{ item['试算编号'] }}</td>
+          <td>{{ item['更新时间'] }}</td>
+        </tr>
+        <tr v-if="!boardItems.length">
+          <td colspan="9" class="empty-state">暂无存储清理同步条目</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 </template>
 
@@ -68,6 +101,7 @@ import { onMounted, ref } from 'vue'
 import { request } from '@/api/client'
 
 type Row = Record<string, string | number | null>
+type BoardRow = Record<string, string | number | null>
 
 const ENDPOINT = '/api/dashboard'
 const columns = ["指标编号", "指标名称", "统计维度", "计算公式", "刷新频率", "展示类型", "数据源", "是否展示"]
@@ -80,6 +114,21 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+
+const boardItems = ref<BoardRow[]>([])
+const boardSummary = ref<Record<string, number>>({})
+
+function badgeClass(status: string | number | null): string {
+  const key = String(status)
+  const map: Record<string, string> = {
+    待清理: 'badge wait',
+    待确认: 'badge confirm',
+    观察中: 'badge watch',
+    已清理: 'badge done',
+    已撤销: 'badge revoke',
+  }
+  return map[key] ?? 'badge revoke'
+}
 
 function resetFilters() {
   filters.value = {}
@@ -126,5 +175,22 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+async function loadCleanupBoard() {
+  try {
+    const response = await request(`${ENDPOINT}/cleanup-board`)
+    if (!response.ok) {
+      throw new Error('存储清理同步读取失败')
+    }
+    const payload = await response.json()
+    boardItems.value = payload.items ?? []
+    boardSummary.value = payload.summary ?? {}
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '存储清理同步读取失败'
+  }
+}
+
+onMounted(() => {
+  void reload()
+  void loadCleanupBoard()
+})
 </script>

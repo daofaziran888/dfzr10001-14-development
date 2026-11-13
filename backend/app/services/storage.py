@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.storage_trial import CONFIG_FIELDS, trial_service
 from app.store import store
 
 MODULE = "storage"
@@ -40,11 +41,24 @@ class StorageService:
         rows = store.rows(MODULE)
         entry = {"id": max((int(row.get("id", 0)) for row in rows), default=0) + 1}
         entry.update({field: values.get(field) for field in REQUIRED_FIELDS})
+        # 可选字段登记时带上，缺省给占位，保留天数默认 30 天。
+        for field in CONFIG_FIELDS:
+            if field in REQUIRED_FIELDS:
+                continue
+            entry[field] = values.get(field, 30 if field == "保留天数" else "未设置")
         entry["status"] = STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False
+        entry["配置版本"] = 1
         rows.append(entry)
         return entry, []
+
+    def update_entry(self, entry_id: int, values: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+        """更新存储配置；保留天数变化会推动试算时间线整体重算，旧试算自动作废。"""
+        entry, message = trial_service.update_config(entry_id, values)
+        if entry is None:
+            return None, message
+        return entry, message
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
@@ -58,4 +72,8 @@ class StorageService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
+        if action == "启用配置":
+            entry["是否启用"] = "是"
+        if action == "停用配置":
+            entry["是否启用"] = "否"
         return entry, f"存储配置已{action}"

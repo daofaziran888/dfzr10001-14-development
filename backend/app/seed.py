@@ -1,7 +1,119 @@
 """示例数据：每个模块给几条不同状态的记录，方便起服务后立刻看到内容。"""
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
+
+
+def _buckets(*ages: tuple[int, int]) -> list[dict[str, Any]]:
+    """按相对今天的采集时间构造分区明细桶：(几天前采集, 记录条数)。"""
+    today = date.today()
+    return [
+        {"采集时间": (today - timedelta(days=age)).isoformat(), "记录条数": count}
+        for age, count in ages
+    ]
+
+
+def _storage_seed_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """存储配置与分区示例数据。
+
+    保留天数使用数值，便于试算直接做日期运算；分区按「分区编号 + 采集时间 + 数据量」
+    描述，清理时间线只由采集时间与保留天数决定，跨月、跨年按同一套日期减法计算。
+    """
+    storages = [
+        {
+            "id": 1,
+            "status": "草稿",
+            "pending": True,
+            "abnormal": False,
+            "存储编号": "STOR-0001",
+            "存储类型": "对象存储",
+            "连接串": "s3://crawler-lake/stor-0001",
+            "压缩方式": "Snappy",
+            "分区策略": "按天分区",
+            "保留天数": 20,
+            "备份策略": "跨区域冷备",
+            "是否启用": "否",
+            "配置版本": 1,
+        },
+        {
+            "id": 2,
+            "status": "待校验",
+            "pending": True,
+            "abnormal": True,
+            "存储编号": "STOR-0002",
+            "存储类型": "数据仓库",
+            "连接串": "jdbc:postgresql://warehouse:5432/stor_0002",
+            "压缩方式": "ZSTD",
+            "分区策略": "按月分区",
+            "保留天数": 30,
+            "备份策略": "每周全量备份",
+            "是否启用": "否",
+            "配置版本": 1,
+        },
+        {
+            "id": 3,
+            "status": "已启用",
+            "pending": False,
+            "abnormal": False,
+            "存储编号": "STOR-0003",
+            "存储类型": "分布式文件系统",
+            "连接串": "hdfs://namenode:8020/stor-0003",
+            "压缩方式": "Gzip",
+            "分区策略": "按小时分区",
+            "保留天数": 7,
+            "备份策略": "每日增量备份",
+            "是否启用": "是",
+            "配置版本": 1,
+        },
+    ]
+    partitions = [
+        {
+            "id": 1,
+            "分区编号": "P-15",
+            "存储编号": "STOR-0001",
+            "采集时间": (date.today() - timedelta(days=15)).isoformat(),
+            "数据量MB": 128,
+            "记录条数": 20,
+            "明细桶": _buckets((15, 20)),
+        },
+        {
+            "id": 2,
+            "分区编号": "P-15",
+            "存储编号": "STOR-0002",
+            "采集时间": (date.today() - timedelta(days=15)).isoformat(),
+            "数据量MB": 256,
+            "记录条数": 60,
+            "明细桶": _buckets((15, 60)),
+        },
+        {
+            # 40 条采集于 16~29 天前（保留 15 天时超期），80 条在 15 天窗口内。
+            "id": 3,
+            "分区编号": "P-30",
+            "存储编号": "STOR-0002",
+            "采集时间": (date.today() - timedelta(days=30)).isoformat(),
+            "数据量MB": 512,
+            "记录条数": 120,
+            "明细桶": _buckets(
+                (16, 10), (19, 10), (23, 10), (29, 10),
+                (3, 20), (8, 20), (12, 20), (15, 20),
+            ),
+        },
+        {
+            "id": 4,
+            "分区编号": "P-7",
+            "存储编号": "STOR-0003",
+            "采集时间": (date.today() - timedelta(days=7)).isoformat(),
+            "数据量MB": 64,
+            "记录条数": 35,
+            "明细桶": _buckets((7, 35)),
+        },
+    ]
+    return storages, partitions
+
+
+_STORAGE_ROWS, _STORAGE_PARTITIONS = _storage_seed_rows()
+
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     "source": [{'id': 1,
@@ -508,42 +620,15 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
   '展示类型': '采集看板样例3',
   '数据源': '采集看板样例3',
   '是否展示': '采集看板样例3'}],
-    "storage": [{'id': 1,
-  'status': '草稿',
-  'pending': True,
-  'abnormal': False,
-  '存储编号': 'STOR-0001',
-  '存储类型': '采集数据存储样例1',
-  '连接串': '采集数据存储样例1',
-  '压缩方式': '采集数据存储样例1',
-  '分区策略': '采集数据存储样例1',
-  '保留天数': '采集数据存储样例1',
-  '备份策略': '采集数据存储样例1',
-  '是否启用': '采集数据存储样例1'},
- {'id': 2,
-  'status': '待校验',
-  'pending': True,
-  'abnormal': True,
-  '存储编号': 'STOR-0002',
-  '存储类型': '采集数据存储样例2',
-  '连接串': '采集数据存储样例2',
-  '压缩方式': '采集数据存储样例2',
-  '分区策略': '采集数据存储样例2',
-  '保留天数': '采集数据存储样例2',
-  '备份策略': '采集数据存储样例2',
-  '是否启用': '采集数据存储样例2'},
- {'id': 3,
-  'status': '已启用',
-  'pending': False,
-  'abnormal': False,
-  '存储编号': 'STOR-0003',
-  '存储类型': '采集数据存储样例3',
-  '连接串': '采集数据存储样例3',
-  '压缩方式': '采集数据存储样例3',
-  '分区策略': '采集数据存储样例3',
-  '保留天数': '采集数据存储样例3',
-  '备份策略': '采集数据存储样例3',
-  '是否启用': '采集数据存储样例3'}],
+    "storage": _STORAGE_ROWS,
+    # 存储配置下的物理分区；试算按存储配置逐分区计算，互不串数据。
+    "storage_partition": _STORAGE_PARTITIONS,
+    # 保留期与分区试算记录（含断点游标、并发去重指纹、最新确认配置快照）。
+    "storage_trial": [],
+    # 历史清理记录：试算确认后落一条，采集看板与本处共用同一份结果。
+    "storage_cleanup": [],
+    # 采集看板同步项：待清理条目会在看板上出现，确认/取消后同步刷新。
+    "storage_dashboard_sync": [],
     "audit": [{'id': 1,
   'status': '已记录',
   'pending': True,

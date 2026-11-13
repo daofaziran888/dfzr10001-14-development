@@ -28,6 +28,12 @@ class EntryPayload(BaseModel):
     remark: str | None = None
 
 
+class TrialRunPayload(BaseModel):
+    """发起保留期试算时的可选项：partition_limit 用来模拟任务中断后的分批处理。"""
+
+    partition_limit: int | None = Field(default=None, ge=0, description="本次最多处理的分区数，不传表示全量试算")
+
+
 
 class SourceEntry(BaseModel):
     """采集源明细结构。"""
